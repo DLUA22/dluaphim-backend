@@ -311,7 +311,7 @@ router.get('/:id/comments', async (req, res) => {
 // API 11: Viết bình luận mới (Có hỗ trợ Reply)
 router.post('/:id/comments', async (req, res) => {
     try {
-        // Nhận thêm parentId và replyToUser từ Frontend gửi lên
+        // Phải có parentId và replyToUser ở đây
         const { username, avatar, content, parentId, replyToUser } = req.body;
         
         if (!username || !content) {
@@ -323,6 +323,7 @@ router.post('/:id/comments', async (req, res) => {
             username,
             avatar,
             content,
+            // Phải có 2 dòng này để lưu vào DB
             parentId: parentId || null,
             replyToUser: replyToUser || null
         });

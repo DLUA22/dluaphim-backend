@@ -6,9 +6,9 @@ const commentSchema = new mongoose.Schema({
     avatar: { type: String, default: 'https://i.pravatar.cc/150?img=11' },
     content: { type: String, required: true },
     
-    // THÊM 2 TRƯỜNG NÀY ĐỂ LÀM TÍNH NĂNG TRẢ LỜI & THÔNG BÁO SAU NÀY
-    parentId: { type: String, default: null }, // Lưu ID của bình luận gốc (nếu đây là reply)
-    replyToUser: { type: String, default: null }, // Lưu tên người bị reply để sau này bắn thông báo
+    // BẮT BUỘC PHẢI CÓ 2 DÒNG NÀY ĐỂ NHẬN DIỆN CÂU TRẢ LỜI
+    parentId: { type: String, default: null }, 
+    replyToUser: { type: String, default: null }, 
     
     createdAt: { type: Date, default: Date.now }
 });
