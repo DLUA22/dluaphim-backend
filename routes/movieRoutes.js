@@ -276,8 +276,15 @@ router.post('/sync-all', async (req, res) => {
         res.status(500).json({ message: 'Lỗi server khi đồng bộ: ' + err.message });
     }
 });
-
-
+// API 8.5: LẤY THÔNG BÁO (BẮT BUỘC ĐẶT Ở ĐÂY, TRÊN NHÓM 2)
+router.get('/notifications/:username', async (req, res) => {
+    try {
+        const notifications = await Comment.find({ replyToUser: req.params.username }).sort({ createdAt: -1 });
+        res.json(notifications);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
 // ==========================================
 // NHÓM 2: CÁC API CÓ CHỨA THAM SỐ :id (PHẢI ĐẶT Ở DƯỚI CÙNG)
 // ==========================================
@@ -308,22 +315,20 @@ router.get('/:id/comments', async (req, res) => {
     }
 });
 
-// API 11: Viết bình luận mới (Có hỗ trợ Reply)
+// API 11: Viết bình luận mới
 router.post('/:id/comments', async (req, res) => {
     try {
-        // Phải có parentId và replyToUser ở đây
-        const { username, avatar, content, parentId, replyToUser } = req.body;
+        // Nhận thêm fullName
+        const { username, fullName, avatar, content, parentId, replyToUser } = req.body;
         
-        if (!username || !content) {
-            return res.status(400).json({ message: 'Vui lòng nhập đủ thông tin!' });
-        }
+        if (!username || !content) return res.status(400).json({ message: 'Thiếu thông tin!' });
 
         const newComment = new Comment({
             movieId: req.params.id,
             username,
+            fullName, // Lưu tên hiển thị
             avatar,
             content,
-            // Phải có 2 dòng này để lưu vào DB
             parentId: parentId || null,
             replyToUser: replyToUser || null
         });
