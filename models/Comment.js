@@ -1,8 +1,8 @@
 const mongoose = require('mongoose');
 
 const commentSchema = new mongoose.Schema({
-    // Lưu ID của bộ phim để biết bình luận này thuộc về phim nào
-    movieId: { type: mongoose.Schema.Types.ObjectId, ref: 'Movie', required: true },
+    // SỬA Ở ĐÂY: Đổi type thành String để nó nhận được cả số lẫn chữ (slug)
+    movieId: { type: String, required: true },
     
     // Thông tin người bình luận
     username: { type: String, required: true },

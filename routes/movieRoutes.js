@@ -282,10 +282,15 @@ router.post('/sync-all', async (req, res) => {
 // NHÓM 2: CÁC API CÓ CHỨA THAM SỐ :id (PHẢI ĐẶT Ở DƯỚI CÙNG)
 // ==========================================
 
-// API 9: Tăng lượt xem
+// API 9: Tăng lượt xem (Hỗ trợ cả slug và ID cũ)
 router.post('/:id/view', async (req, res) => {
     try {
-        await Movie.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } });
+        let movie = await Movie.findOneAndUpdate({ slug: req.params.id }, { $inc: { views: 1 } });
+        
+        // Nếu không tìm thấy bằng slug, và mã gửi lên đúng chuẩn 24 ký tự của MongoDB
+        if (!movie && req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+            movie = await Movie.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } });
+        }
         res.json({ message: 'Đã tăng 1 view' });
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -295,6 +300,7 @@ router.post('/:id/view', async (req, res) => {
 // API 10: Lấy danh sách bình luận của 1 phim
 router.get('/:id/comments', async (req, res) => {
     try {
+        // Vì bên Schema đã đổi thành String, nó sẽ tìm khớp chính xác cái slug gửi lên
         const comments = await Comment.find({ movieId: req.params.id }).sort({ createdAt: -1 });
         res.json(comments);
     } catch (err) {
@@ -312,7 +318,7 @@ router.post('/:id/comments', async (req, res) => {
         }
 
         const newComment = new Comment({
-            movieId: req.params.id,
+            movieId: req.params.id, // Lưu thẳng cái slug vào đây
             username,
             avatar,
             content
@@ -325,10 +331,13 @@ router.post('/:id/comments', async (req, res) => {
     }
 });
 
-// API 12: Lấy chi tiết 1 phim (Cái hố đen :id)
+// API 12: Lấy chi tiết 1 phim
 router.get('/:id', async (req, res) => {
     try {
-        const movie = await Movie.findById(req.params.id);
+        let movie = await Movie.findOne({ slug: req.params.id });
+        if (!movie && req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+            movie = await Movie.findById(req.params.id);
+        }
         res.json(movie);
     } catch (err) {
         res.status(500).json({ message: err.message });
