@@ -276,11 +276,33 @@ router.post('/sync-all', async (req, res) => {
         res.status(500).json({ message: 'Lỗi server khi đồng bộ: ' + err.message });
     }
 });
-// API 8.5: LẤY THÔNG BÁO (BẮT BUỘC ĐẶT Ở ĐÂY, TRÊN NHÓM 2)
 router.get('/notifications/:username', async (req, res) => {
     try {
-        const notifications = await Comment.find({ replyToUser: req.params.username }).sort({ createdAt: -1 });
+        const notifications = await Comment.find({ 
+            replyToUser: req.params.username,
+            isNotiRead: { $ne: true } // Lọc bỏ những cái đã bị đánh dấu ẩn
+        }).sort({ createdAt: -1 });
         res.json(notifications);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// API 8.6: XÓA (ẨN) 1 THÔNG BÁO TỪ NÚT "X"
+router.put('/notifications/:id/read', async (req, res) => {
+    try {
+        await Comment.findByIdAndUpdate(req.params.id, { isNotiRead: true });
+        res.json({ message: 'Đã ẩn thông báo' });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// API 8.7: XÓA (ẨN) TẤT CẢ THÔNG BÁO CÙNG LÚC
+router.put('/notifications/clear-all/:username', async (req, res) => {
+    try {
+        await Comment.updateMany({ replyToUser: req.params.username }, { isNotiRead: true });
+        res.json({ message: 'Đã ẩn tất cả' });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
