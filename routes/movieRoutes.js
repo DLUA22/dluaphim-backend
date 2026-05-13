@@ -308,20 +308,23 @@ router.get('/:id/comments', async (req, res) => {
     }
 });
 
-// API 11: Viết bình luận mới
+// API 11: Viết bình luận mới (Có hỗ trợ Reply)
 router.post('/:id/comments', async (req, res) => {
     try {
-        const { username, avatar, content } = req.body;
+        // Nhận thêm parentId và replyToUser từ Frontend gửi lên
+        const { username, avatar, content, parentId, replyToUser } = req.body;
         
         if (!username || !content) {
             return res.status(400).json({ message: 'Vui lòng nhập đủ thông tin!' });
         }
 
         const newComment = new Comment({
-            movieId: req.params.id, // Lưu thẳng cái slug vào đây
+            movieId: req.params.id,
             username,
             avatar,
-            content
+            content,
+            parentId: parentId || null,
+            replyToUser: replyToUser || null
         });
 
         await newComment.save();
