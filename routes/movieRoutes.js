@@ -102,22 +102,34 @@ router.post('/leech', async (req, res) => {
     }
 });
 
-// API 6: Cào phim theo Tên chỉ định
-router.post('/leech-search', async (req, res) => {
-    const keyword = req.body.keyword; 
+// ==========================================
+// API 6: Cài đặt Công Tắc Bảo Trì Server Video
+// ==========================================
+let isPlayerEnabled = true;
+
+router.get('/settings/player', (req, res) => {
+    res.json({ enabled: isPlayerEnabled });
+});
+
+router.post('/settings/player', (req, res) => {
+    isPlayerEnabled = req.body.enabled;
+    res.json({ message: "Đã cập nhật trạng thái", enabled: isPlayerEnabled });
+});
+
+// ==========================================
+// API 6.1: Cào phim chính xác theo SLUG (Dùng cho Bảng tìm kiếm)
+// ==========================================
+router.post('/leech-by-slug', async (req, res) => {
+    const slug = req.body.slug; 
 
     try {
-        const searchRes = await fetch(`https://phimapi.com/v1/api/tim-kiem?keyword=${encodeURIComponent(keyword)}&limit=1`);
-        const searchData = await searchRes.json();
-
-        if (!searchData.data || !searchData.data.items || searchData.data.items.length === 0) {
-            return res.status(404).json({ message: `Không tìm thấy phim nào có tên "${keyword}" trên KKPhim!` });
-        }
-
-        const slug = searchData.data.items[0].slug;
         const detailRes = await fetch(`https://phimapi.com/phim/${slug}`);
         const detailData = await detailRes.json();
         
+        if (!detailData.status) {
+            return res.status(404).json({ message: "Không lấy được dữ liệu phim này" });
+        }
+
         const movieData = detailData.movie;
         
         let episodes = [];
@@ -129,7 +141,7 @@ router.post('/leech-search', async (req, res) => {
         }
 
         if (episodes.length === 0) {
-            return res.status(400).json({ message: `Phim "${movieData.name}" mới có Trailer, chưa có tập để xem!` });
+            return res.status(400).json({ message: `Phim chưa có tập!` });
         }
 
         const title = movieData.name;
@@ -138,12 +150,11 @@ router.post('/leech-search', async (req, res) => {
         const type = movieData.type; 
         const genres = movieData.category ? movieData.category.map(c => c.name) : [];
 
-        const existingMovie = await Movie.findOne({ title: title });
+        const existingMovie = await Movie.findOne({ slug: slug });
         if (existingMovie) {
-            return res.status(400).json({ message: `Phim "${title}" đã có sẵn trong hệ thống!` });
+            return res.status(400).json({ message: `Phim đã tồn tại!` });
         }
 
-        // Đã thêm slug và description
         const newMovie = new Movie({ 
             title, thumbnail, episodes, status, genres, type,
             slug: slug,
@@ -151,11 +162,11 @@ router.post('/leech-search', async (req, res) => {
         });
         await newMovie.save();
 
-        res.json({ message: `🎉 Thành công! Đã cào bộ phim: "${title}"` });
+        res.json({ message: `Thành công` });
 
     } catch (err) {
         console.error(err); 
-        res.status(500).json({ message: 'Lỗi khi cào phim: ' + err.message });
+        res.status(500).json({ message: 'Lỗi: ' + err.message });
     }
 });
 
