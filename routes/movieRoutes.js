@@ -230,72 +230,80 @@ router.post('/leech-genre', async (req, res) => {
 });
 
 // ==========================================
-// API 8: Đồng bộ tất cả phim (Bản nâng cấp - Cứu cả phim cũ thiếu slug)
+// API 8: Đồng bộ tất cả phim (Bản nâng cấp - Chạy Song Song Siêu Tốc)
 // ==========================================
 router.post('/sync-all', async (req, res) => {
     try {
-        // Lấy TẤT CẢ phim trong Database, không chừa bộ nào
         const movies = await Movie.find();
         let updatedCount = 0;
 
-        for (let movie of movies) {
+        // 1. Tạo một hàm riêng để xử lý cho 1 bộ phim
+        const processSingleMovie = async (movie) => {
             try {
                 let currentSlug = movie.slug;
+                let isModified = false;
 
-                // 1. NẾU LÀ PHIM CŨ CHƯA CÓ SLUG -> Đi tìm slug bằng tên phim
+                // Nếu phim cũ chưa có slug -> Đi tìm
                 if (!currentSlug) {
                     const searchRes = await fetch(`https://phimapi.com/v1/api/tim-kiem?keyword=${encodeURIComponent(movie.title)}&limit=1`);
                     const searchData = await searchRes.json();
                     
                     if (searchData.data && searchData.data.items && searchData.data.items.length > 0) {
                         currentSlug = searchData.data.items[0].slug;
-                        movie.slug = currentSlug; // Bù đắp slug vào Database cho phim cũ luôn
+                        movie.slug = currentSlug; 
+                        isModified = true;
                     }
                 }
 
-                // 2. KHI ĐÃ CÓ SLUG -> Tiến hành vào KKPhim lấy Mô tả và Tập mới
+                // Khi đã có slug -> Vào KKPhim lấy dữ liệu mới
                 if (currentSlug) {
                     const response = await fetch(`https://phimapi.com/phim/${currentSlug}`);
                     const data = await response.json();
 
                     if (data.status) {
-                        // Cập nhật trạng thái tập
                         movie.status = data.movie.episode_current || movie.status;
+                        if (data.movie.content) movie.description = data.movie.content;
                         
-                        // Cập nhật nội dung
-                        if (data.movie.content) {
-                            movie.description = data.movie.content;
-                        }
-                        
-                        // Cập nhật link tập phim
                         if (data.episodes && data.episodes.length > 0) {
                             movie.episodes = data.episodes[0].server_data.map(ep => ({
                                 name: ep.name,
                                 url: ep.link_m3u8
                             }));
                         }
-                        await movie.save(); 
-                        updatedCount++;
+                        isModified = true;
                     }
                 }
+
+                // Chỉ lưu vào Database nếu có sự thay đổi (giảm tải cho DB)
+                if (isModified) {
+                    await movie.save();
+                    return 1; // Báo cáo thành công 1 phim
+                }
+                return 0; // Không có gì mới
+
             } catch (fetchErr) {
                 console.error(`Lỗi khi đồng bộ phim ${movie.title}:`, fetchErr.message);
+                return 0;
             }
+        };
+
+        // 2. Thuật toán CHUNKING (Chia lô) & PROMISE.ALL (Chạy song song)
+        const chunkSize = 10; // Xử lý 10 phim cùng 1 lúc (Tránh bị chặn API)
+        
+        for (let i = 0; i < movies.length; i += chunkSize) {
+            // Cắt ra 10 phim
+            const chunk = movies.slice(i, i + chunkSize);
+            
+            // Chạy 10 phim này ĐỒNG THỜI
+            const results = await Promise.all(chunk.map(movie => processSingleMovie(movie)));
+            
+            // Cộng dồn số lượng phim đã update thành công
+            updatedCount += results.reduce((total, num) => total + num, 0);
         }
-        res.json({ message: `Hoàn tất! Đã đồng bộ và vá lỗi thành công ${updatedCount} bộ phim.`, updatedCount });
+
+        res.json({ message: `⚡ Hoàn tất siêu tốc! Đã cập nhật ${updatedCount}/${movies.length} bộ phim.`, updatedCount });
     } catch (err) {
         res.status(500).json({ message: 'Lỗi server khi đồng bộ: ' + err.message });
-    }
-});
-router.get('/notifications/:username', async (req, res) => {
-    try {
-        const notifications = await Comment.find({ 
-            replyToUser: req.params.username,
-            isNotiRead: { $ne: true } // Lọc bỏ những cái đã bị đánh dấu ẩn
-        }).sort({ createdAt: -1 });
-        res.json(notifications);
-    } catch (err) {
-        res.status(500).json({ message: err.message });
     }
 });
 
