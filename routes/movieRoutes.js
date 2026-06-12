@@ -230,35 +230,44 @@ router.post('/leech-genre', async (req, res) => {
 });
 
 // ==========================================
-// API 8: ĐỒNG BỘ SIÊU TỐC (CHẠY NGẦM + BULK WRITE)
+// API 8: ĐỒNG BỘ SIÊU TỐC (CHẠY NGẦM + BULK WRITE + CÓ BÁO CÁO)
 // ==========================================
-router.post('/sync-all', async (req, res) => {
-    // 1. Phản hồi NGAY LẬP TỨC cho Frontend để web không bị đơ
-    res.json({ message: '⚡ Lệnh đồng bộ đã được gửi! Hệ thống đang tự động cày cuốc ngầm. Bạn có thể làm việc khác hoặc tắt web đi.' });
 
-    // 2. Hàm chạy ngầm (Lưu ý: Không có chữ 'await' ở trước hàm này)
-    runSyncInBackground();
+let isSyncing = false; // Cờ hiệu báo cáo trạng thái
+
+// API 8.1: Nơi để Frontend hỏi thăm trạng thái
+router.get('/sync-status', (req, res) => {
+    res.json({ isSyncing: isSyncing });
+});
+
+// API 8.2: Gửi lệnh đồng bộ
+router.post('/sync-all', async (req, res) => {
+    if (isSyncing) {
+        return res.status(400).json({ message: 'Hệ thống đang đồng bộ rồi, xin kiên nhẫn!' });
+    }
+    
+    res.json({ message: '⚡ Lệnh đã gửi! Tiến trình ngầm đang chạy.' });
+    runSyncInBackground(); // Khởi động máy cày
 });
 
 // Thuật toán cày cuốc ngầm
 async function runSyncInBackground() {
+    isSyncing = true; // 🔴 Đóng cửa, bật đèn đỏ báo đang bận
     try {
         console.log("▶ Bắt đầu tiến trình đồng bộ ngầm hàng loạt...");
         const movies = await Movie.find();
         
-        let bulkOperations = []; // Giỏ hàng chứa các lệnh cập nhật DB
-        const chunkSize = 20;    // Kéo 20 phim cùng lúc từ KKPhim
+        let bulkOperations = []; 
+        const chunkSize = 20;    
 
         for (let i = 0; i < movies.length; i += chunkSize) {
             const chunk = movies.slice(i, i + chunkSize);
             
-            // Chạy song song 20 request
             const results = await Promise.all(chunk.map(async (movie) => {
                 try {
                     let currentSlug = movie.slug;
                     let isModified = false;
 
-                    // Nếu thiếu slug, đi tìm
                     if (!currentSlug) {
                         const searchRes = await fetch(`https://phimapi.com/v1/api/tim-kiem?keyword=${encodeURIComponent(movie.title)}&limit=1`);
                         const searchData = await searchRes.json();
@@ -268,7 +277,6 @@ async function runSyncInBackground() {
                         }
                     }
 
-                    // Gọi KKPhim lấy data
                     if (currentSlug) {
                         const response = await fetch(`https://phimapi.com/phim/${currentSlug}`);
                         const data = await response.json();
@@ -282,7 +290,6 @@ async function runSyncInBackground() {
                                 }));
                             }
 
-                            // Đóng gói lệnh cập nhật (Không gọi save() ngay)
                             return {
                                 updateOne: {
                                     filter: { _id: movie._id },
@@ -302,19 +309,16 @@ async function runSyncInBackground() {
                 } catch (err) { return null; }
             }));
 
-            // Lọc bỏ những phim bị lỗi (null) và gom vào "giỏ hàng"
             const validOps = results.filter(op => op !== null);
             bulkOperations.push(...validOps);
 
-            // GHI SỈ: Cứ gom đủ 100 phim thì xả vào Database 1 lần cho lẹ, rồi làm trống giỏ
             if (bulkOperations.length >= 100) {
                 await Movie.bulkWrite(bulkOperations);
-                console.log(`✅ Đã lưu sỉ thành công ${bulkOperations.length} phim vào Database.`);
-                bulkOperations = []; // Reset giỏ hàng
+                console.log(`✅ Đã lưu sỉ thành công ${bulkOperations.length} phim.`);
+                bulkOperations = []; 
             }
         }
 
-        // Xả nốt những phim còn sót lại trong giỏ
         if (bulkOperations.length > 0) {
             await Movie.bulkWrite(bulkOperations);
             console.log(`✅ Đã lưu sỉ đợt cuối ${bulkOperations.length} phim.`);
@@ -324,6 +328,8 @@ async function runSyncInBackground() {
 
     } catch (err) {
         console.error("❌ Lỗi nghiêm trọng trong tiến trình ngầm:", err);
+    } finally {
+        isSyncing = false;
     }
 }
 
